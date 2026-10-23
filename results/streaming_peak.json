@@ -1,0 +1,16 @@
+{
+  "model": "federated",
+  "transactions": 300000,
+  "alerts": 304,
+  "true_alerts": 303,
+  "false_alarms": 1,
+  "missed_fraud": 13,
+  "throughput_tx_per_s": 129920.8,
+  "scoring_capacity_tx_per_s": 1150493.0,
+  "latency_ms": {
+    "mean": 328.84,
+    "p50": 314.91,
+    "p95": 539.42,
+    "p99": 1047.96
+  }
+}

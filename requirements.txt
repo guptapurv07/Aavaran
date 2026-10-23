@@ -1,0 +1,12 @@
+flwr[simulation]==1.42.0
+torch==2.14.1
+opacus==1.6.0
+pandas==3.1.0
+numpy==2.5.4
+scikit-learn==1.9.1
+pyarrow==26.0.0
+matplotlib==3.11.2
+confluent-kafka==2.16.0
+streamlit==1.66.1
+plotly==7.1.0
+kagglehub==1.0.3
