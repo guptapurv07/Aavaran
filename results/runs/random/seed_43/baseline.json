@@ -1,0 +1,80 @@
+{
+  "split": "random",
+  "seed": 43,
+  "epochs": 20,
+  "lr_decay": 0.9,
+  "isolated": {
+    "bank_1": {
+      "precision": 0.9939320388349514,
+      "recall": 0.4987819732034105,
+      "f1": 0.6642335766423357,
+      "pr_auc": 0.6875826379843412,
+      "roc_auc": 0.9897473231596372,
+      "false_alarms": 5,
+      "recall_TRANSFER": 1.0,
+      "recall_CASH_OUT": 0.0,
+      "train_rows": 1071716,
+      "train_seconds": 14.1
+    },
+    "bank_2": {
+      "precision": 0.9932716568544996,
+      "recall": 0.7192448233861145,
+      "f1": 0.8343341575415048,
+      "pr_auc": 0.9707677779186101,
+      "roc_auc": 0.9830202795602867,
+      "false_alarms": 8,
+      "recall_TRANSFER": 0.4456654456654457,
+      "recall_CASH_OUT": 0.991494532199271,
+      "train_rows": 992115,
+      "train_seconds": 12.4
+    },
+    "bank_3": {
+      "precision": 0.9920454545454546,
+      "recall": 0.5316686967113277,
+      "f1": 0.6923076923076923,
+      "pr_auc": 0.8182360788822226,
+      "roc_auc": 0.9931185293758056,
+      "false_alarms": 7,
+      "recall_TRANSFER": 1.0,
+      "recall_CASH_OUT": 0.06561360874848117,
+      "train_rows": 1009463,
+      "train_seconds": 12.7
+    },
+    "bank_4": {
+      "precision": 0.988988988988989,
+      "recall": 0.6017052375152253,
+      "f1": 0.7482014388489209,
+      "pr_auc": 0.9325901227145463,
+      "roc_auc": 0.9854904537692996,
+      "false_alarms": 11,
+      "recall_TRANSFER": 0.21001221001221002,
+      "recall_CASH_OUT": 0.991494532199271,
+      "train_rows": 1046698,
+      "train_seconds": 13.2
+    },
+    "bank_5": {
+      "precision": 0.9665671641791045,
+      "recall": 0.9859926918392204,
+      "f1": 0.9761832981609888,
+      "pr_auc": 0.9924422471539586,
+      "roc_auc": 0.9972339998959665,
+      "false_alarms": 56,
+      "recall_TRANSFER": 0.9853479853479854,
+      "recall_CASH_OUT": 0.9866342648845686,
+      "train_rows": 461092,
+      "train_seconds": 6.0
+    }
+  },
+  "centralised": {
+    "precision": 0.9993887530562348,
+    "recall": 0.9957369062119367,
+    "f1": 0.9975594874923734,
+    "pr_auc": 0.9959309697422746,
+    "roc_auc": 0.999711277365237,
+    "false_alarms": 1,
+    "recall_TRANSFER": 1.0,
+    "recall_CASH_OUT": 0.991494532199271,
+    "train_rows": 4581084,
+    "train_seconds": 55.9
+  }
+}

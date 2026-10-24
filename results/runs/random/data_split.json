@@ -1,0 +1,59 @@
+{
+  "split": "random",
+  "features": [
+    "log_amount",
+    "log_old_bal_orig",
+    "log_new_bal_orig",
+    "err_bal_orig",
+    "orig_drained",
+    "hour_sin",
+    "hour_cos",
+    "type_CASH_IN",
+    "type_CASH_OUT",
+    "type_DEBIT",
+    "type_PAYMENT",
+    "type_TRANSFER"
+  ],
+  "banks": [
+    {
+      "bank": 1,
+      "rows": 1190796,
+      "fraud": 1967,
+      "fraud_TRANSFER": 1967,
+      "fraud_CASH_OUT": 0
+    },
+    {
+      "bank": 2,
+      "rows": 1102351,
+      "fraud": 1976,
+      "fraud_TRANSFER": 0,
+      "fraud_CASH_OUT": 1976
+    },
+    {
+      "bank": 3,
+      "rows": 1121626,
+      "fraud": 983,
+      "fraud_TRANSFER": 983,
+      "fraud_CASH_OUT": 0
+    },
+    {
+      "bank": 4,
+      "rows": 1162998,
+      "fraud": 988,
+      "fraud_TRANSFER": 0,
+      "fraud_CASH_OUT": 988
+    },
+    {
+      "bank": 5,
+      "rows": 512325,
+      "fraud": 657,
+      "fraud_TRANSFER": 328,
+      "fraud_CASH_OUT": 329
+    }
+  ],
+  "test": {
+    "rows": 1272524,
+    "fraud": 1642,
+    "first_hour": 1
+  }
+}

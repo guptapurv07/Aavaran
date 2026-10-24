@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from torch.utils.data import Dataset
 
-from config import BATCH_SIZE, LEARNING_RATE, POS_WEIGHT, PROCESSED_DIR
+from config import BATCH_SIZE, LEARNING_RATE, POS_WEIGHT, processed_dir
 from preprocess import FEATURES
 
 
@@ -62,15 +62,15 @@ def keep_batch(batch):
 
 
 @lru_cache(maxsize=None)
-def load_bank(bank: int) -> dict[str, np.ndarray]:
+def load_bank(bank: int, split: str = "random") -> dict[str, np.ndarray]:
     """Training and validation arrays for one bank (0-based id)."""
-    with np.load(PROCESSED_DIR / f"bank_{bank}.npz") as d:
+    with np.load(processed_dir(split) / f"bank_{bank}.npz") as d:
         return {k: d[k] for k in d.files}
 
 
 @lru_cache(maxsize=None)
-def load_test() -> dict[str, np.ndarray]:
-    with np.load(PROCESSED_DIR / "test.npz") as d:
+def load_test(split: str = "random") -> dict[str, np.ndarray]:
+    with np.load(processed_dir(split) / "test.npz") as d:
         return {k: d[k] for k in d.files}
 
 
@@ -82,15 +82,19 @@ def train_model(
     lr: float = LEARNING_RATE,
     batch_size: int = BATCH_SIZE,
     seed: int = 0,
+    lr_decay: float = 1.0,
 ) -> float:
-    """Train with a class-weighted loss. Returns the mean loss of the last epoch."""
+    """Train with a class-weighted loss, multiplying the learning rate by lr_decay
+    after every epoch. Returns the mean loss of the last epoch."""
     Xt, yt = torch.from_numpy(X), torch.from_numpy(y).float()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(POS_WEIGHT))
     gen = torch.Generator().manual_seed(seed)
 
     model.train()
-    for _ in range(epochs):
+    for epoch in range(epochs):
+        for group in optimizer.param_groups:
+            group["lr"] = lr * lr_decay**epoch
         perm = torch.randperm(len(yt), generator=gen)
         total = 0.0
         for start in range(0, len(yt), batch_size):

@@ -1,4 +1,5 @@
 {
+  "split": "time",
   "features": [
     "log_amount",
     "log_old_bal_orig",
@@ -16,42 +17,43 @@
   "banks": [
     {
       "bank": 1,
-      "rows": 1190796,
-      "fraud": 1967,
-      "fraud_TRANSFER": 1967,
+      "rows": 1194209,
+      "fraud": 1183,
+      "fraud_TRANSFER": 1183,
       "fraud_CASH_OUT": 0
     },
     {
       "bank": 2,
-      "rows": 1102351,
-      "fraud": 1976,
+      "rows": 1110586,
+      "fraud": 1195,
       "fraud_TRANSFER": 0,
-      "fraud_CASH_OUT": 1976
+      "fraud_CASH_OUT": 1195
     },
     {
       "bank": 3,
-      "rows": 1121626,
-      "fraud": 983,
-      "fraud_TRANSFER": 983,
+      "rows": 1125143,
+      "fraud": 592,
+      "fraud_TRANSFER": 592,
       "fraud_CASH_OUT": 0
     },
     {
       "bank": 4,
-      "rows": 1162998,
-      "fraud": 988,
+      "rows": 1169304,
+      "fraud": 597,
       "fraud_TRANSFER": 0,
-      "fraud_CASH_OUT": 988
+      "fraud_CASH_OUT": 597
     },
     {
       "bank": 5,
-      "rows": 512325,
-      "fraud": 657,
-      "fraud_TRANSFER": 328,
-      "fraud_CASH_OUT": 329
+      "rows": 514642,
+      "fraud": 396,
+      "fraud_TRANSFER": 197,
+      "fraud_CASH_OUT": 199
     }
   ],
   "test": {
-    "rows": 1272524,
-    "fraud": 1642
+    "rows": 1248736,
+    "fraud": 4250,
+    "first_hour": 356
   }
 }

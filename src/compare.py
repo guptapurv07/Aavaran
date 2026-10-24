@@ -1,13 +1,15 @@
 """Stage 6: compare isolated, federated, federated + DP and centralised training.
 
-Reads the JSON files written by baseline.py and federated.py, then writes
-results/comparison.md (the full table) and four charts to results/charts/,
-each in a light and a dark version.
+Reads every seed's results from results/runs/<split>/seed_*/, then writes
+results/comparison.md (mean ± standard deviation over seeds, for the random
+test set and, if it has been run, the out-of-time test set) and four charts of
+the random-split results to results/charts/, each in a light and a dark version.
 """
 
 import json
 
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -40,32 +42,47 @@ THEMES = {
     },
 }
 UNSEEN = {1: "CASH_OUT", 2: "TRANSFER", 3: "CASH_OUT", 4: "TRANSFER"}  # fraud type each bank never saw
+METRICS = ["precision", "recall", "f1", "pr_auc", "roc_auc", "false_alarms", "recall_TRANSFER", "recall_CASH_OUT"]
+FEDERATED_RUNS = [("federated", "Aavaran federated", None)] + [
+    (f"federated_dp_eps{e:g}", f"Aavaran + DP, ε = {e:g}", e) for e in sorted(DP_EPSILONS, reverse=True)
+]
 
 
-def load(name: str) -> dict | None:
-    path = RESULTS_DIR / f"{name}.json"
-    return json.loads(path.read_text()) if path.exists() else None
+def load_runs(split: str) -> dict[int, dict[str, dict]]:
+    """{seed: {run name: result}} for every seed directory of a split."""
+    runs = {}
+    for seed_dir in sorted((RESULTS_DIR / "runs" / split).glob("seed_*")):
+        runs[int(seed_dir.name.split("_")[1])] = {p.stem: json.loads(p.read_text()) for p in seed_dir.glob("*.json")}
+    return runs
 
 
-def collect() -> tuple[list[dict], dict]:
-    """One row per setup, plus the per-round histories of the federated runs."""
-    baseline = load("baseline")
-    if baseline is None:
-        raise SystemExit("results/baseline.json is missing: run src/baseline.py first")
+def summarise(samples: list[dict]) -> dict:
+    """Mean of each metric over seeds, with its standard deviation under '<metric>_sd'."""
+    out = {"n": len(samples)}
+    for key in METRICS:
+        values = np.array([s[key] for s in samples], dtype=float)
+        out[key] = float(values.mean())
+        out[f"{key}_sd"] = float(values.std(ddof=1)) if len(values) > 1 else 0.0
+    return out
+
+
+def collect(split: str) -> tuple[list[dict], dict]:
+    """One row per setup (averaged over seeds), plus each federated run's per-seed histories."""
+    runs = [r for r in load_runs(split).values() if "baseline" in r]
+    if not runs:
+        raise SystemExit(f"No results in results/runs/{split}: run src/run_experiments.py first")
     rows = [
-        {"setup": f"Bank {b} alone", "kind": "isolated", **baseline["isolated"][f"bank_{b}"]}
+        {"setup": f"Bank {b} alone", "kind": "isolated", **summarise([r["baseline"]["isolated"][f"bank_{b}"] for r in runs])}
         for b in range(1, NUM_BANKS + 1)
     ]
     histories = {}
-    runs = [("federated", "Aavaran federated", None)] + [
-        (f"federated_dp_eps{e:g}", f"Aavaran + DP, ε = {e:g}", e) for e in sorted(DP_EPSILONS, reverse=True)
-    ]
-    for name, label, eps in runs:
-        run = load(name)
-        if run is not None:
-            rows.append({"setup": label, "kind": "federated", "epsilon": eps, **run["final"]})
-            histories[label] = run["history"]
-    rows.append({"setup": "Centralised (upper limit)", "kind": "centralised", **baseline["centralised"]})
+    for name, label, eps in FEDERATED_RUNS:
+        done = [r[name] for r in runs if name in r]
+        if done:
+            rows.append({"setup": label, "kind": "federated", "epsilon": eps, **summarise([d["final"] for d in done])})
+            histories[label] = [d["history"] for d in done]
+    rows.append({"setup": "Centralised (upper limit)", "kind": "centralised",
+                 **summarise([r["baseline"]["centralised"] for r in runs])})
     return rows, histories
 
 
@@ -115,26 +132,34 @@ def save(fig, name: str, theme: str) -> None:
     plt.close(fig)
 
 
+def seeds_note(rows: list[dict]) -> str:
+    n = max(r["n"] for r in rows)
+    return f"mean of {n} seeds" if n > 1 else "1 seed"
+
+
 # --- the four charts -------------------------------------------------------------
 
 
 def chart_setups(rows: list[dict], t: dict, theme: str) -> None:
-    """F1 for every setup: Aavaran runs in the accent colour, references in gray."""
+    """F1 for every setup: Aavaran runs in the accent colour, references in gray, ±1 SD whiskers."""
     width, height = 800, 130 + 34 * len(rows)
+    whiskers = "; whiskers show ±1 standard deviation" if max(r["n"] for r in rows) > 1 else ""
     fig, ax = new_figure(
         t, width, height, "Federated training closes the gap to pooled data",
-        "F1 score on the common test set (1.27M transactions)",
+        f"F1 on the common test set (1.27M transactions), {seeds_note(rows)}{whiskers}",
         [200 / width, 40 / height, 540 / width, (height - 130) / height],
     )
     ys = list(range(len(rows)))[::-1]
-    ax.set_xlim(0, 1.08)
+    ax.set_xlim(0, 1.1)
     ax.set_ylim(-0.6, len(rows) - 0.4)
     ax.set_yticks(ys, [r["setup"] for r in rows], color=t["ink2"], fontsize=12 * PT)
     ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0], ["0", "0.25", "0.5", "0.75", "1"])
     for y, r in zip(ys, rows):
         color = t["accent"] if r["kind"] == "federated" else t["reference"]
         rounded_hbar(ax, y, r["f1"], 16, color)
-        ax.text(r["f1"] + 0.012, y, f"{r['f1']:.3f}", va="center", color=t["ink2"], fontsize=11 * PT)
+        lo, hi = r["f1"] - r["f1_sd"], r["f1"] + r["f1_sd"]
+        ax.plot([lo, hi], [y, y], color=t["ink"], linewidth=1 * PT, solid_capstyle="butt", zorder=4)
+        ax.text(hi + 0.012, y, f"{r['f1']:.3f}", va="center", color=t["ink2"], fontsize=11 * PT)
     legend(ax, t, [Patch(color=t["accent"], label="Aavaran (federated)"),
                    Patch(color=t["reference"], label="Reference setups")])
     save(fig, "f1_by_setup", theme)
@@ -149,7 +174,7 @@ def chart_unseen(rows: list[dict], t: dict, theme: str) -> None:
     width, height = 800, 310
     fig, ax = new_figure(
         t, width, height, "Banks catch fraud they have never seen",
-        "Recall on the fraud type missing from each bank's own data",
+        f"Recall on the fraud type missing from each bank's own data, {seeds_note(rows)}",
         [200 / width, 40 / height, 540 / width, 180 / height],
     )
     banks = list(UNSEEN)
@@ -173,19 +198,23 @@ def chart_unseen(rows: list[dict], t: dict, theme: str) -> None:
 
 
 def chart_rounds(rows: list[dict], histories: dict, t: dict, theme: str) -> None:
-    """PR-AUC of the global model after each round, one line per privacy level."""
+    """PR-AUC of the global model after each round: mean line and lowest-to-highest-seed band per privacy level."""
     if not histories:
         return
     width, height = 800, 420
     order = [f"Aavaran + DP, ε = {e:g}" for e in sorted(DP_EPSILONS)] + ["Aavaran federated"]
-    curves = {  # round 0 is the untrained model, so start from round 1
-        name: [p for p in histories[name] if p["round"] > 0] for name in order if name in histories
-    }
-    lowest = min(p["pr_auc"] for h in curves.values() for p in h)
+    curves = {}  # name -> (rounds, seeds x rounds PR-AUC); round 0 is the untrained model
+    for name in order:
+        if name in histories:
+            per_seed = [[p for p in h if p["round"] > 0] for h in histories[name]]
+            curves[name] = ([p["round"] for p in per_seed[0]], np.array([[p["pr_auc"] for p in h] for h in per_seed]))
+    lowest = min(v.min() for _, v in curves.values())
     y_min = max(0.0, (int(lowest * 50) - 1) / 50)
+    n = max(len(v) for _, v in curves.values())
     fig, ax = new_figure(
         t, width, height, "Global model quality by federated round",
-        "PR-AUC on the common test set after each round" + (" (y-axis starts above zero)" if y_min > 0 else ""),
+        f"PR-AUC on the common test set after each round, mean of {n} seeds; bands span the lowest to highest seed"
+        + (" (y-axis starts above zero)" if y_min > 0 else ""),
         [70 / width, 50 / height, 560 / width, 290 / height],
     )
     ax.grid(axis="y", color=t["grid"], linewidth=1 * PT)
@@ -193,14 +222,16 @@ def chart_rounds(rows: list[dict], histories: dict, t: dict, theme: str) -> None
     labels = {"Aavaran federated": "No DP"} | {f"Aavaran + DP, ε = {e:g}": f"ε = {e:g}" for e in DP_EPSILONS}
     color_of = dict(zip(order, t["ramp"]))
     handles = []
-    for name, h in curves.items():
-        ax.plot([p["round"] for p in h], [p["pr_auc"] for p in h], color=color_of[name], linewidth=2 * PT,
+    for name, (xs, values) in curves.items():
+        if len(values) > 1:
+            ax.fill_between(xs, values.min(axis=0), values.max(axis=0), color=color_of[name], alpha=0.10, linewidth=0)
+        ax.plot(xs, values.mean(axis=0), color=color_of[name], linewidth=2 * PT,
                 solid_joinstyle="round", solid_capstyle="round")
         handles.append(Line2D([], [], color=color_of[name], linewidth=2 * PT, label=labels[name]))
     central = next(r for r in rows if r["kind"] == "centralised")["pr_auc"]
     ax.axhline(central, color=t["muted"], linewidth=1 * PT, zorder=1)
     handles.insert(0, Line2D([], [], color=t["muted"], linewidth=1 * PT, label=f"Centralised {central:.3f}"))
-    rounds = max(p["round"] for h in curves.values() for p in h)
+    rounds = max(xs[-1] for xs, _ in curves.values())
     ax.set_xlim(1, rounds)
     ax.set_xticks([1] + list(range(5, rounds + 1, 5)))
     ax.set_ylim(y_min, 1.0)
@@ -210,7 +241,7 @@ def chart_rounds(rows: list[dict], histories: dict, t: dict, theme: str) -> None
 
 
 def chart_privacy(rows: list[dict], t: dict, theme: str) -> None:
-    """Privacy vs performance: final F1 by privacy budget, against the two reference setups."""
+    """Privacy vs performance: final F1 (±1 SD) by privacy budget, against the two reference setups."""
     fed = [r for r in rows if r["kind"] == "federated"]
     if len(fed) < 2:
         return
@@ -218,7 +249,7 @@ def chart_privacy(rows: list[dict], t: dict, theme: str) -> None:
     width, height = 800, 400
     fig, ax = new_figure(
         t, width, height, "Privacy costs little accuracy",
-        "F1 of the final global model by privacy budget ε per bank (smaller ε = stronger privacy)",
+        f"F1 of the final global model by privacy budget ε per bank (smaller ε = stronger privacy), {seeds_note(rows)}",
         [70 / width, 50 / height, 520 / width, 280 / height],
     )
     ax.grid(axis="y", color=t["grid"], linewidth=1 * PT)
@@ -226,11 +257,13 @@ def chart_privacy(rows: list[dict], t: dict, theme: str) -> None:
     xs = list(range(len(fed)))
     ys = [r["f1"] for r in fed]
     ax.set_xticks(xs, [f"ε = {r['epsilon']:g}" if r["epsilon"] is not None else "No DP" for r in fed])
-    ax.plot(xs, ys, color=t["accent"], linewidth=2 * PT, marker="o", ms=8 * PT, mec=t["surface"], mew=2 * PT)
+    for x, r in zip(xs, fed):
+        ax.plot([x, x], [r["f1"] - r["f1_sd"], r["f1"] + r["f1_sd"]], color=t["ink"], linewidth=1 * PT, zorder=2)
+    ax.plot(xs, ys, color=t["accent"], linewidth=2 * PT, marker="o", ms=8 * PT, mec=t["surface"], mew=2 * PT, zorder=3)
     for x, y in zip(xs, ys):
-        ax.annotate(f"{y:.3f}", (x, y), xytext=(0, -16), textcoords="offset points", ha="center",
+        ax.annotate(f"{y:.3f}", (x, y), xytext=(0, -18), textcoords="offset points", ha="center",
                     color=t["ink2"], fontsize=11 * PT)
-    alone = sum(r["f1"] for r in rows if r["kind"] == "isolated") / sum(r["kind"] == "isolated" for r in rows)
+    alone = float(np.mean([r["f1"] for r in rows if r["kind"] == "isolated"]))
     central = next(r for r in rows if r["kind"] == "centralised")["f1"]
     for value, text in ((central, "Pooled data"), (alone, "Each bank alone (avg)")):
         ax.axhline(value, color=t["muted"], linewidth=1 * PT, zorder=1)
@@ -242,41 +275,83 @@ def chart_privacy(rows: list[dict], t: dict, theme: str) -> None:
     save(fig, "privacy_tradeoff", theme)
 
 
-def write_table(rows: list[dict]) -> None:
+# --- the table -------------------------------------------------------------------
+
+
+def cell(r: dict, key: str) -> str:
+    fmt = (lambda v: f"{v:,.0f}") if key == "false_alarms" else (lambda v: f"{v:.3f}")
+    return f"{fmt(r[key])} ± {fmt(r[key + '_sd'])}" if r["n"] > 1 else fmt(r[key])
+
+
+def table(rows: list[dict]) -> list[str]:
+    keys = ["precision", "recall", "f1", "pr_auc", "recall_TRANSFER", "recall_CASH_OUT", "false_alarms"]
     lines = [
-        "# Aavaran results",
-        "",
-        "All setups are scored on the same held-out test set: 1,272,524 transactions, 1,642 of them fraud.",
-        "Precision, recall and F1 use a 0.5 probability threshold; PR-AUC does not depend on a threshold.",
-        "",
         "| Setup | Precision | Recall | F1 | PR-AUC | Recall TRANSFER | Recall CASH_OUT | False alarms |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
-        lines.append(
-            f"| {r['setup']} | {r['precision']:.3f} | {r['recall']:.3f} | {r['f1']:.3f} | {r['pr_auc']:.3f} "
-            f"| {r['recall_TRANSFER']:.3f} | {r['recall_CASH_OUT']:.3f} | {r['false_alarms']:,} |"
-        )
-    lines += ["", "Banks 1 and 3 never saw CASH_OUT fraud; Banks 2 and 4 never saw TRANSFER fraud.", ""]
+        lines.append(f"| {r['setup']} | " + " | ".join(cell(r, k) for k in keys) + " |")
+    alone = np.mean([r["f1"] for r in rows if r["kind"] == "isolated"])
+    lines += ["", f"Average F1 of the 5 banks training alone: {alone:.3f}."]
+    return lines
+
+
+def test_set_line(split: str) -> str:
+    test = json.loads((RESULTS_DIR / "runs" / split / "data_split.json").read_text())["test"]
+    return f"{test['rows']:,} transactions, {test['fraud']:,} of them fraud ({test['fraud'] / test['rows']:.2%})"
+
+
+def write_report(random_rows: list[dict], time_rows: list[dict] | None) -> None:
+    n = max(r["n"] for r in random_rows)
+    lines = [
+        "# Aavaran results",
+        "",
+        "## Main benchmark: random test set",
+        "",
+        f"Test set: {test_set_line('random')}, held out from every bank. "
+        f"Each value is the mean ± standard deviation over {n} training seeds (same data split). "
+        "Precision, recall and F1 use a 0.5 probability threshold; PR-AUC does not depend on a threshold.",
+        "",
+        *table(random_rows),
+        "",
+        "Banks 1 and 3 never saw CASH_OUT fraud; Banks 2 and 4 never saw TRANSFER fraud.",
+        "",
+    ]
     for name in ("f1_by_setup", "unseen_fraud_recall", "rounds_pr_auc", "privacy_tradeoff"):
         if (CHARTS_DIR / f"{name}.png").exists():
             lines.append(f"![{name}](charts/{name}.png)")
+    if time_rows:
+        split = json.loads((RESULTS_DIR / "runs" / "time" / "data_split.json").read_text())
+        train_rate = sum(b["fraud"] for b in split["banks"]) / sum(b["rows"] for b in split["banks"])
+        test_rate = split["test"]["fraud"] / split["test"]["rows"]
+        lines += [
+            "",
+            "## Out-of-time check: test on later hours",
+            "",
+            f"Models train on PaySim's first {split['test']['first_hour'] - 1} hours and are tested on the rest: "
+            f"{test_set_line('time')}. PaySim's normal transaction volume falls sharply in later hours while "
+            f"fraud stays steady, so the test fraud rate is {test_rate / train_rate:.1f} times the training rate, "
+            "a real shift between training and test data.",
+            "",
+            *table(time_rows),
+        ]
     (RESULTS_DIR / "comparison.md").write_text("\n".join(lines) + "\n")
 
 
 def main() -> None:
     plt.rcParams["font.family"] = ["Helvetica Neue", "Arial", "DejaVu Sans"]
-    rows, histories = collect()
+    rows, histories = collect("random")
     for theme, t in THEMES.items():
         chart_setups(rows, t, theme)
         chart_unseen(rows, t, theme)
         chart_rounds(rows, histories, t, theme)
         chart_privacy(rows, t, theme)
-    write_table(rows)
-    width = max(len(r["setup"]) for r in rows)
-    for r in rows:
-        print(f"{r['setup']:<{width}}  F1={r['f1']:.3f}  PR-AUC={r['pr_auc']:.3f}  "
-              f"recall TRANSFER={r['recall_TRANSFER']:.3f} CASH_OUT={r['recall_CASH_OUT']:.3f}")
+    time_rows = collect("time")[0] if load_runs("time") else None
+    write_report(rows, time_rows)
+    for split, split_rows in (("random", rows), ("time", time_rows or [])):
+        for r in split_rows:
+            print(f"[{split}] {r['setup']:<27} F1={cell(r, 'f1'):<15} PR-AUC={cell(r, 'pr_auc'):<15} "
+                  f"recall TRANSFER={r['recall_TRANSFER']:.3f} CASH_OUT={r['recall_CASH_OUT']:.3f}  (n={r['n']})")
     print(f"\nWrote {RESULTS_DIR / 'comparison.md'} and charts in {CHARTS_DIR}")
 
 

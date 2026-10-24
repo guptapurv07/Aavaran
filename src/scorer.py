@@ -5,7 +5,7 @@ training, scores them, and publishes every transaction above the threshold to
 the fraud-alerts topic. When the stream goes quiet it writes throughput and
 latency numbers to results/streaming.json (or the file named by --out).
 
-  python src/scorer.py                      # uses models/federated.pt
+  python src/scorer.py                      # uses models/random/seed_42/federated.pt
   python src/scorer.py --model federated_dp_eps5
 """
 
@@ -19,23 +19,25 @@ import torch
 from confluent_kafka import Consumer, Producer
 
 from config import (
-    ALERTS_TOPIC, KAFKA_BOOTSTRAP, MODELS_DIR, PROCESSED_DIR, RESULTS_DIR, THRESHOLD, TRANSACTIONS_TOPIC,
+    ALERTS_TOPIC, KAFKA_BOOTSTRAP, RESULTS_DIR, SEED, SPLITS, THRESHOLD, TRANSACTIONS_TOPIC, model_dir, processed_dir,
 )
 from model import FraudNet, predict_proba
 from preprocess import build_features, scale
 
 
-def load_scorer(name: str) -> tuple[FraudNet, np.ndarray, np.ndarray]:
+def load_scorer(name: str, split: str = "random", seed: int = SEED) -> tuple[FraudNet, np.ndarray, np.ndarray]:
     model = FraudNet()
-    model.load_state_dict(torch.load(MODELS_DIR / f"{name}.pt"))
-    with open(PROCESSED_DIR / "scaler.json") as f:
+    model.load_state_dict(torch.load(model_dir(split, seed) / f"{name}.pt"))
+    with open(processed_dir(split) / "scaler.json") as f:
         scaler = json.load(f)
     return model, np.array(scaler["mean"]), np.array(scaler["std"])
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--model", default="federated", help="model file in models/, without .pt")
+    parser.add_argument("--model", default="federated", help="model name, without .pt")
+    parser.add_argument("--split", choices=SPLITS, default="random", help="which experiment the model comes from")
+    parser.add_argument("--seed", type=int, default=SEED, help="which training seed the model comes from")
     parser.add_argument("--threshold", type=float, default=THRESHOLD)
     parser.add_argument("--batch", type=int, default=500, help="max transactions per micro-batch")
     parser.add_argument("--max-wait-ms", type=int, default=100, help="max time to wait while filling a micro-batch")
@@ -44,7 +46,7 @@ def main() -> None:
     parser.add_argument("--out", default="streaming.json", help="stats file name in results/")
     args = parser.parse_args()
 
-    model, mean, std = load_scorer(args.model)
+    model, mean, std = load_scorer(args.model, args.split, args.seed)
     torch.set_num_threads(1)  # micro-batches are small; extra threads only add overhead
     consumer = Consumer({
         "bootstrap.servers": args.bootstrap,
@@ -60,7 +62,8 @@ def main() -> None:
     scored = flagged = true_alerts = missed = 0
     latencies_ms, scoring_seconds = [], 0.0
     first_seen = last_seen = None
-    print(f"Scoring '{TRANSACTIONS_TOPIC}' with models/{args.model}.pt (threshold {args.threshold}) ...")
+    model_path = model_dir(args.split, args.seed) / f"{args.model}.pt"
+    print(f"Scoring '{TRANSACTIONS_TOPIC}' with {model_path.relative_to(RESULTS_DIR.parent)} (threshold {args.threshold}) ...")
     try:
         while True:
             batch = consumer.consume(num_messages=args.batch, timeout=args.max_wait_ms / 1000)
@@ -105,7 +108,7 @@ def main() -> None:
         return
     lat = np.array(latencies_ms)
     stats = {
-        "model": args.model,
+        "model": str(model_path.relative_to(RESULTS_DIR.parent)),
         "transactions": scored,
         "alerts": flagged,
         "true_alerts": true_alerts,
