@@ -39,11 +39,14 @@ Measured on the common held-out test set: 1,272,524 transactions, 1,642 of them 
 | --- | --- | --- |
 | Banks 1 to 4, each training alone | 0.660 to 0.701 | 0.554 to 0.735 |
 | Bank 5 alone (saw a little of both fraud types) | 0.986 | 0.994 |
+| Average of the 5 banks training alone | 0.74 | 0.73 |
 | **Aavaran federated** | **0.985** | **0.992** |
 | Aavaran + differential privacy, ε = 10 | 0.978 | 0.978 |
 | Aavaran + differential privacy, ε = 5 | 0.978 | 0.978 |
 | Aavaran + differential privacy, ε = 1 | 0.968 | 0.976 |
 | Centralised: all data pooled (not allowed in real life) | 0.997 | 0.996 |
+
+The four banks that each lack one fraud type score 0.66 to 0.70 alone, and federated training lifts them to 0.985. Bank 5, which sees both fraud types, already scores 0.986 alone.
 
 - **Fraud a bank has never seen:** training alone, Banks 1 to 4 catch only 0 to 8% of the fraud type missing from their own data. The federated model catches 96 to 99% of it, and no bank shared a single record.
 - **Close to pooled data:** federated F1 is 0.985, against 0.997 when all data is pooled.
@@ -141,7 +144,7 @@ The goal is to show that federated performance gets close to centralised perform
 - Run a single Kafka broker locally with Docker Compose (KRaft mode, so no ZooKeeper).
 - Write a producer (`producer.py`) that replays PaySim transactions into a `transactions` topic at a steady rate, each tagged with its bank.
 - Write a scoring consumer (`scorer.py`) that loads the latest global federated model, scores each transaction, and publishes flagged ones to a `fraud-alerts` topic.
-- Measure throughput (transactions per second) and average scoring latency, so the resume line has real numbers.
+- Measure throughput (transactions per second) and average scoring latency.
 - Use the `confluent-kafka` Python client.
 
 ### Step 7: Dashboard
@@ -153,7 +156,7 @@ A Streamlit app showing:
 - The privacy vs accuracy trade-off chart.
 - A transaction tester: enter transaction details and get a fraud score, plus a live feed of flagged transactions from the fraud-alerts topic.
 
-### Step 8: Phase 2 Extensions (After the Deadline)
+### Step 8: Phase 2 Extensions
 
 - Containerise each bank and the server with Docker Compose.
 - Scale the Kafka pipeline with multiple partitions and consumer groups.
@@ -188,26 +191,20 @@ aavaran/
 └── README.md
 ```
 
-## Timeline and Goal
+## Stages
 
-**Goal: Stages 1 to 7 (about 70%) complete by 25 October 2026.**
-
-| Stage | Work | Target | Status |
-| --- | --- | --- | --- |
-| 1 | Setup: environment, pinned libraries, config, dataset download | 24 Oct | Done |
-| 2 | Data preparation: sender-side features, common test set, non-IID split into 5 banks | 24 Oct | Done |
-| 3 | Baseline model: isolated banks and the centralised upper limit | 24 Oct | Done |
-| 4 | Federated learning with Flower (FedAvg, 5 banks, 20 rounds) | 24 Oct | Done |
-| 5 | Differential privacy with Opacus (ε = 1, 5, 10) | 25 Oct | Done |
-| 6 | Comparison experiments: results table and charts | 25 Oct | Done |
-| 7 | Real-time scoring with Kafka: producer, scorer, throughput and latency | 25 Oct | Done |
-| 8 | Streamlit dashboard | Following week | Planned |
-| 9 | Containerise each bank and the server; Kafka partitions and consumer groups | Following week | Planned |
-| 10 | SHAP + LLM alert explanations, FedProx, secure aggregation | Following week | Planned |
-
-## Resume Note
-
-List the project as **"Aavaran: Federated Fraud Detection (Ongoing)"**. Describe only the parts that are actually built and working when the resume is submitted, with real numbers from your experiments. Talk about the planned features in the interview as next steps. Interviewers will ask detailed questions, and being able to explain everything you've listed is what makes the project impressive.
+| Stage | Work | Status |
+| --- | --- | --- |
+| 1 | Setup: environment, pinned libraries, config, dataset download | Done |
+| 2 | Data preparation: sender-side features, common test set, non-IID split into 5 banks | Done |
+| 3 | Baseline model: isolated banks and the centralised upper limit | Done |
+| 4 | Federated learning with Flower (FedAvg, 5 banks, 20 rounds) | Done |
+| 5 | Differential privacy with Opacus (ε = 1, 5, 10) | Done |
+| 6 | Comparison experiments: results table and charts | Done |
+| 7 | Real-time scoring with Kafka: producer, scorer, throughput and latency | Done |
+| 8 | Streamlit dashboard | Planned |
+| 9 | Containerise each bank and the server; Kafka partitions and consumer groups | Planned |
+| 10 | SHAP + LLM alert explanations, FedProx, secure aggregation | Planned |
 
 ## How to Run
 
